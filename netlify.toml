@@ -1,0 +1,13 @@
+[build]
+  base    = "app"
+  command = "cd .. && npm ci && cd app && npm ci && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
+  force  = true
