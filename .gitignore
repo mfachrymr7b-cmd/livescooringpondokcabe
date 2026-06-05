@@ -1,4 +1,4 @@
 node_modules/
 .env.local
 .env
-convex/_generated/
+# convex/_generated/ — committed to repo for Netlify build
