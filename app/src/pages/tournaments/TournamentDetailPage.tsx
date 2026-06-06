@@ -203,6 +203,13 @@ export function TournamentDetailPage() {
   const deleteTournamentMutation = useMutation(api.mutations.tournaments.deleteTournament);
   const updateTournament = useMutation(api.mutations.tournaments.update);
 
+  // Query flights berdasarkan round yang dipilih di tee form
+  const selectedTeeMatch = matches?.find((m) => m._id === teeForm.matchId) ?? matches?.[0];
+  const flightsForTeeTime = useQuery(
+    api.queries.tournaments.listFlights,
+    id && selectedTeeMatch ? { tournamentId: id, roundNumber: selectedTeeMatch.roundNumber } : "skip"
+  );
+
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSavingStatus, setIsSavingStatus] = useState(false);
   const [scheduleStart, setScheduleStart] = useState("");
@@ -981,11 +988,29 @@ export function TournamentDetailPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="groupName">Group</Label>
-                  <Input
-                    id="groupName"
-                    value={teeForm.groupName}
-                    onChange={(event) => setTeeForm((prev) => ({ ...prev, groupName: event.target.value }))}
-                  />
+                  {flightsForTeeTime && flightsForTeeTime.length > 0 ? (
+                    <select
+                      id="groupName"
+                      value={teeForm.groupName}
+                      onChange={(event) => setTeeForm((prev) => ({ ...prev, groupName: event.target.value }))}
+                      className="flex h-9 w-full appearance-none rounded-md border border-emerald-600/50 px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      style={{ backgroundColor: "#065F46", color: "#ECFDF5" }}
+                    >
+                      <option value="">Pilih flight...</option>
+                      {flightsForTeeTime.map((flight) => (
+                        <option key={flight._id} value={flight.name} style={{ backgroundColor: "#065F46" }}>
+                          {flight.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      id="groupName"
+                      value={teeForm.groupName}
+                      onChange={(event) => setTeeForm((prev) => ({ ...prev, groupName: event.target.value }))}
+                      placeholder="Flight A, Grup 1, dll."
+                    />
+                  )}
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
