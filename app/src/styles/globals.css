@@ -114,9 +114,9 @@
 
 /* ─── Semantic Tokens ────────────────────────────────────────────────────────*/
 :root {
-  --bg:           #0f172a;
-  --bg-elevated:  #111827;
-  --bg-subtle:    #1f2937;
+  --bg:           #064E3B;
+  --bg-elevated:  #065f46;
+  --bg-subtle:    #047857;
   --fg:           #f8fafc;
   --fg-muted:     #cbd5e1;
   --fg-subtle:    #94a3b8;
