@@ -210,3 +210,118 @@ export const playersWithoutScorecard = query({
     );
   },
 });
+
+/**
+ * List scorecard per match, dikelompokkan per flight.
+ * Dipakai di ScorecardsListPage untuk tampilan folder Flight.
+ */
+export const listByMatchGroupedByFlight = query({
+  args: {
+    tournamentId: v.id("tournaments"),
+    matchId: v.id("matches"),
+  },
+  handler: async (ctx, args) => {
+    // Ambil semua flight untuk match ini
+    const match = await ctx.db.get(args.matchId);
+    if (!match) return [];
+
+    const flights = await ctx.db
+      .query("tournament_flights")
+      .withIndex("by_tournamentId_and_roundNumber", (q) =>
+        q.eq("tournamentId", args.tournamentId).eq("roundNumber", match.roundNumber)
+      )
+      .take(50);
+
+    // Ambil semua scorecard untuk match ini
+    const scorecards = await ctx.db
+      .query("scorecards")
+      .withIndex("by_matchId", (q) => q.eq("matchId", args.matchId))
+      .take(256);
+
+    // Enrich scorecard dengan data player
+    const enrichedScorecards = await Promise.all(
+      scorecards.map(async (sc) => {
+        const player = await ctx.db.get(sc.playerId);
+        return {
+          ...sc,
+          player: player
+            ? {
+                _id: player._id,
+                displayName: player.displayName,
+                bibNumber: player.bibNumber,
+                handicapIndex: player.handicapIndex,
+                status: player.status,
+              }
+            : null,
+        };
+      })
+    );
+
+    // Build map: playerId → flightName
+    const playerFlightMap = new Map<string, { flightId: string; flightName: string; sequence: number }>();
+    for (const flight of flights) {
+      const members = await ctx.db
+        .query("flight_players")
+        .withIndex("by_flightId", (q) => q.eq("flightId", flight._id))
+        .take(50);
+      for (const m of members) {
+        playerFlightMap.set(m.playerId, {
+          flightId: flight._id,
+          flightName: flight.name,
+          sequence: flight.sequence,
+        });
+      }
+    }
+
+    // Group scorecard by flight
+    const flightGroups = new Map<string, {
+      flightId: string;
+      flightName: string;
+      sequence: number;
+      scorecards: typeof enrichedScorecards;
+    }>();
+
+    // Inisialisasi semua flight (termasuk yang belum ada scorecard)
+    for (const flight of flights) {
+      flightGroups.set(flight._id, {
+        flightId: flight._id,
+        flightName: flight.name,
+        sequence: flight.sequence,
+        scorecards: [],
+      });
+    }
+
+    // Tambahkan group "Tanpa Flight" untuk yang tidak ter-assign
+    flightGroups.set("no_flight", {
+      flightId: "no_flight",
+      flightName: "Tanpa Flight",
+      sequence: 999,
+      scorecards: [],
+    });
+
+    for (const sc of enrichedScorecards) {
+      const flightInfo = playerFlightMap.get(sc.playerId);
+      const key = flightInfo?.flightId ?? "no_flight";
+      if (!flightGroups.has(key)) {
+        flightGroups.set(key, {
+          flightId: key,
+          flightName: flightInfo?.flightName ?? "Tanpa Flight",
+          sequence: flightInfo?.sequence ?? 999,
+          scorecards: [],
+        });
+      }
+      flightGroups.get(key)!.scorecards.push(sc);
+    }
+
+    // Sort tiap grup by displayName, sort grup by sequence
+    return Array.from(flightGroups.values())
+      .filter((g) => g.scorecards.length > 0) // hanya tampilkan flight yang ada scorecard-nya
+      .sort((a, b) => a.sequence - b.sequence)
+      .map((g) => ({
+        ...g,
+        scorecards: g.scorecards.sort((a, b) =>
+          (a.player?.displayName ?? "").localeCompare(b.player?.displayName ?? "")
+        ),
+      }));
+  },
+});

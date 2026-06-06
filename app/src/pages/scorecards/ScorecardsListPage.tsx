@@ -419,6 +419,10 @@ export function ScorecardsListPage() {
   );
 
   const allScorecards = useQuery((api.queries.scorecards as any).listAll, { limit: 50 });
+  const flightGrouped = useQuery(
+    (api.queries.scorecards as any).listByMatchGroupedByFlight,
+    selectedMatch ? { tournamentId: id as Id<"tournaments">, matchId: selectedMatch._id as Id<"matches"> } : "skip"
+  );
   const createScorecard = useMutation(api.mutations.scorecards.create);
 
   // Filter by search
@@ -667,59 +671,131 @@ export function ScorecardsListPage() {
             />
           </div>
 
-          {/* ── Scorecards list ── */}
-          {scorecards === undefined ? (
+          {/* ── Scorecards list grouped by flight ── */}
+          {scorecards === undefined || flightGrouped === undefined ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* Existing scorecards */}
-              {filteredScorecards.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-400">
-                    <ClipboardList className="h-3.5 w-3.5" />
-                    Scorecard Aktif ({filteredScorecards.length})
-                  </div>
-                  {filteredScorecards.map((sc) => (
-                    <ScorecardRowItem
-                      key={sc._id}
-                      row={sc as ScorecardRow}
-                      holesPerRound={holesPerRound}
-                      onInput={() => navigate(`/scorecards/${sc._id}`)}
-                    />
-                  ))}
-                </div>
-              )}
+            <div className="space-y-3">
+              {/* Flight groups */}
+              {flightGrouped && flightGrouped.length > 0 ? (
+                <>
+                  {flightGrouped.map((flight: {
+                    flightId: string;
+                    flightName: string;
+                    sequence: number;
+                    scorecards: ScorecardRow[];
+                  }) => {
+                    const filtered = flight.scorecards.filter((sc) => {
+                      const q = search.toLowerCase();
+                      if (!q) return true;
+                      return (
+                        sc.player?.displayName.toLowerCase().includes(q) ||
+                        sc.player?.bibNumber?.toLowerCase().includes(q)
+                      );
+                    });
+                    if (filtered.length === 0) return null;
+                    const verifiedCount = filtered.filter((s) => s.status === "verified").length;
+                    const inProgressCount = filtered.filter((s) => s.status === "in_progress").length;
 
-              {/* Players without scorecard */}
-              {filteredWithout.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-400/70">
-                    <XCircle className="h-3.5 w-3.5" />
-                    Belum Ada Scorecard ({filteredWithout.length})
-                  </div>
-                  {filteredWithout.map((player) => (
-                    <PlayerWithoutScorecardRow
-                      key={player._id}
-                      player={player as PlayerRow}
-                      isCreating={creatingFor === player._id}
-                      onCreate={() => handleCreateScorecard(player as PlayerRow)}
-                    />
-                  ))}
-                </div>
-              )}
+                    return (
+                      <div key={flight.flightId} className="overflow-hidden rounded-xl border border-emerald-600/40 bg-emerald-900/20">
+                        {/* Flight header */}
+                        <div className="flex items-center gap-3 bg-emerald-800/50 px-4 py-3">
+                          <FolderOpen className="h-4 w-4 text-yellow-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <span className="font-bold text-white">{flight.flightName}</span>
+                            <span className="ml-3 text-xs text-emerald-400">
+                              {filtered.length} pemain ·{" "}
+                              <span className="text-emerald-300">{verifiedCount} verified</span>
+                              {inProgressCount > 0 && (
+                                <span className="text-amber-300"> · {inProgressCount} in progress</span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                        {/* Scorecard rows */}
+                        <div className="divide-y divide-emerald-800/40 px-3 py-2 space-y-2">
+                          {filtered.map((sc) => (
+                            <ScorecardRowItem
+                              key={sc._id}
+                              row={sc}
+                              holesPerRound={holesPerRound}
+                              onInput={() => navigate(`/scorecards/${sc._id}`)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
 
-              {/* Empty state */}
-              {filteredScorecards.length === 0 && filteredWithout.length === 0 && (
-                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-emerald-700/50 bg-emerald-900/20 py-14 text-center">
-                  <ClipboardList className="mb-3 h-10 w-10 text-emerald-600" />
-                  <p className="font-medium text-emerald-200">
-                    {search ? "Tidak ada peserta yang cocok" : "Belum ada peserta terdaftar"}
-                  </p>
-                  <p className="mt-1 text-sm text-emerald-400">
-                    {search ? "Coba kata kunci lain" : "Daftarkan peserta di halaman detail turnamen"}
-                  </p>
+                  {/* Players without scorecard (tidak ada flight group) */}
+                  {filteredWithout.length > 0 && (
+                    <div className="overflow-hidden rounded-xl border border-dashed border-emerald-600/40 bg-emerald-900/10">
+                      <div className="flex items-center gap-3 bg-emerald-900/30 px-4 py-3">
+                        <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                        <span className="font-bold text-emerald-200">Belum Ada Scorecard ({filteredWithout.length})</span>
+                      </div>
+                      <div className="px-3 py-2 space-y-2">
+                        {filteredWithout.map((player) => (
+                          <PlayerWithoutScorecardRow
+                            key={player._id}
+                            player={player as PlayerRow}
+                            isCreating={creatingFor === player._id}
+                            onCreate={() => handleCreateScorecard(player as PlayerRow)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* Fallback flat list jika tidak ada flight */
+                <div className="space-y-4">
+                  {filteredScorecards.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-400">
+                        <ClipboardList className="h-3.5 w-3.5" />
+                        Scorecard Aktif ({filteredScorecards.length})
+                      </div>
+                      {filteredScorecards.map((sc) => (
+                        <ScorecardRowItem
+                          key={sc._id}
+                          row={sc as ScorecardRow}
+                          holesPerRound={holesPerRound}
+                          onInput={() => navigate(`/scorecards/${sc._id}`)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {filteredWithout.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-400/70">
+                        <XCircle className="h-3.5 w-3.5" />
+                        Belum Ada Scorecard ({filteredWithout.length})
+                      </div>
+                      {filteredWithout.map((player) => (
+                        <PlayerWithoutScorecardRow
+                          key={player._id}
+                          player={player as PlayerRow}
+                          isCreating={creatingFor === player._id}
+                          onCreate={() => handleCreateScorecard(player as PlayerRow)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {filteredScorecards.length === 0 && filteredWithout.length === 0 && (
+                    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-emerald-700/50 bg-emerald-900/20 py-14 text-center">
+                      <ClipboardList className="mb-3 h-10 w-10 text-emerald-600" />
+                      <p className="font-medium text-emerald-200">
+                        {search ? "Tidak ada peserta yang cocok" : "Belum ada peserta terdaftar"}
+                      </p>
+                      <p className="mt-1 text-sm text-emerald-400">
+                        {search ? "Coba kata kunci lain" : "Daftarkan peserta di halaman detail turnamen"}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
