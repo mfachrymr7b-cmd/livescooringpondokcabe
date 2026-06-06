@@ -188,11 +188,11 @@ export function CreateTournamentPage() {
                   id="course"
                   value={form.courseId}
                   onChange={(event) => setForm((prev) => ({ ...prev, courseId: event.target.value }))}
-                  className="flex h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
+                  className="flex h-9 w-full rounded-md border border-emerald-600/50 bg-emerald-800/40 px-3 py-1 text-sm text-emerald-50 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                 >
-                  <option value="">Pilih lapangan</option>
+                  <option value="" className="bg-emerald-900 text-white">Pilih lapangan</option>
                   {courses.map((course) => (
-                    <option key={course._id} value={course._id}>
+                    <option key={course._id} value={course._id} className="bg-emerald-900 text-white">
                       {course.name}
                     </option>
                   ))}
@@ -204,10 +204,10 @@ export function CreateTournamentPage() {
                   id="gameMode"
                   value={form.gameMode}
                   onChange={(event) => setForm((prev) => ({ ...prev, gameMode: event.target.value }))}
-                  className="flex h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
+                  className="flex h-9 w-full rounded-md border border-emerald-600/50 bg-emerald-800/40 px-3 py-1 text-sm text-emerald-50 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                 >
                   {GAME_MODES.map((mode) => (
-                    <option key={mode.value} value={mode.value}>
+                    <option key={mode.value} value={mode.value} className="bg-emerald-900 text-white">
                       {mode.label}
                     </option>
                   ))}
