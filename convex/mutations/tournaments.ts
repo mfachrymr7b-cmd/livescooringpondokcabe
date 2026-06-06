@@ -671,3 +671,95 @@ export const generateTeeTimes = mutation({
     };
   },
 });
+
+/** Hapus turnamen beserta semua data terkait (hanya untuk status completed/cancelled) */
+export const deleteTournament = mutation({
+  args: {
+    id: v.id("tournaments"),
+    userId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { tournament } = await assertCanManageTournament(ctx, args.id, args.userId);
+
+    if (tournament.status !== "completed" && tournament.status !== "cancelled") {
+      throw new Error("Hanya turnamen yang sudah selesai atau dibatalkan yang bisa dihapus");
+    }
+
+    const tid = args.id;
+
+    // Hapus scorecard_holes → scorecards
+    const scorecards = await ctx.db
+      .query("scorecards")
+      .withIndex("by_tournamentId", (q) => q.eq("tournamentId", tid))
+      .take(500);
+    for (const sc of scorecards) {
+      const holes = await ctx.db
+        .query("scorecard_holes")
+        .withIndex("by_scorecardId", (q) => q.eq("scorecardId", sc._id))
+        .take(100);
+      for (const h of holes) await ctx.db.delete(h._id);
+      await ctx.db.delete(sc._id);
+    }
+
+    // Hapus leaderboard
+    const leaderboard = await ctx.db
+      .query("leaderboard")
+      .withIndex("by_tournamentId", (q) => q.eq("tournamentId", tid))
+      .take(500);
+    for (const lb of leaderboard) await ctx.db.delete(lb._id);
+
+    // Hapus flight_players → tournament_flights
+    const flights = await ctx.db
+      .query("tournament_flights")
+      .withIndex("by_tournamentId", (q) => q.eq("tournamentId", tid))
+      .take(200);
+    for (const f of flights) {
+      const members = await ctx.db
+        .query("flight_players")
+        .withIndex("by_flightId", (q) => q.eq("flightId", f._id))
+        .take(50);
+      for (const m of members) await ctx.db.delete(m._id);
+      await ctx.db.delete(f._id);
+    }
+
+    // Hapus tee_time_slots → tee_times
+    const teeTimes = await ctx.db
+      .query("tee_times")
+      .withIndex("by_tournamentId", (q) => q.eq("tournamentId", tid))
+      .take(200);
+    for (const tt of teeTimes) {
+      const slots = await ctx.db
+        .query("tee_time_slots")
+        .withIndex("by_teeTimeId", (q) => q.eq("teeTimeId", tt._id))
+        .take(50);
+      for (const s of slots) await ctx.db.delete(s._id);
+      await ctx.db.delete(tt._id);
+    }
+
+    // Hapus matches
+    const matches = await ctx.db
+      .query("matches")
+      .withIndex("by_tournamentId", (q) => q.eq("tournamentId", tid))
+      .take(100);
+    for (const m of matches) await ctx.db.delete(m._id);
+
+    // Hapus players
+    const players = await ctx.db
+      .query("players")
+      .withIndex("by_tournamentId", (q) => q.eq("tournamentId", tid))
+      .take(500);
+    for (const p of players) await ctx.db.delete(p._id);
+
+    // Hapus notifications terkait
+    const notifications = await ctx.db
+      .query("notifications")
+      .withIndex("by_tournamentId", (q) => q.eq("tournamentId", tid))
+      .take(500);
+    for (const n of notifications) await ctx.db.delete(n._id);
+
+    // Hapus turnamen itu sendiri
+    await ctx.db.delete(tid);
+
+    return { success: true };
+  },
+});

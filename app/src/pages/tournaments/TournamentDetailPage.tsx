@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   Radio,
   Search,
   Swords,
+  Trash2,
   Users,
   Flag,
   ChevronUp,
@@ -199,12 +200,16 @@ export function TournamentDetailPage() {
   const registerPlayer = useMutation(api.mutations.players.register);
   const createMatch = useMutation(api.mutations.tournaments.createMatch);
   const updateTournamentStatus = useMutation(api.mutations.tournaments.updateStatus);
+  const deleteTournamentMutation = useMutation(api.mutations.tournaments.deleteTournament);
   const updateTournament = useMutation(api.mutations.tournaments.update);
 
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSavingStatus, setIsSavingStatus] = useState(false);
   const [scheduleStart, setScheduleStart] = useState("");
   const [scheduleEnd, setScheduleEnd] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!tournament) return;
@@ -366,6 +371,20 @@ export function TournamentDetailPage() {
       setStatusMessage(err instanceof Error ? err.message : "Gagal mengubah status turnamen.");
     } finally {
       setIsSavingStatus(false);
+    }
+  }
+
+  async function handleDeleteTournament() {
+    if (!tournament || !user?.id) return;
+    setIsDeleting(true);
+    try {
+      await deleteTournamentMutation({ id: id!, userId: user.id });
+      navigate("/tournaments");
+    } catch (err) {
+      setStatusMessage(err instanceof Error ? err.message : "Gagal menghapus turnamen.");
+      setShowDeleteConfirm(false);
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -538,6 +557,45 @@ export function TournamentDetailPage() {
               Close Turnamen
             </Button>
           </div>
+
+          {/* Tombol hapus — hanya muncul jika turnamen sudah completed/cancelled */}
+          {(tournament.status === "completed" || tournament.status === "cancelled") && (
+            <div className="border-t border-red-200 pt-4 mt-2">
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="gap-1.5"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Hapus Turnamen Ini
+              </Button>
+              <p className="mt-1 text-xs text-red-400">
+                Menghapus turnamen akan menghapus semua data peserta, scorecard, dan leaderboard secara permanen.
+              </p>
+            </div>
+          )}
+
+          {/* Modal konfirmasi hapus */}
+          <Modal open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+            <ModalContent>
+              <ModalHeader>
+                <ModalTitle>Hapus Turnamen?</ModalTitle>
+                <ModalDescription>
+                  Tindakan ini tidak dapat dibatalkan. Semua data turnamen <strong>{tournament.name}</strong> termasuk scorecard, leaderboard, dan data peserta akan dihapus permanen.
+                </ModalDescription>
+              </ModalHeader>
+              <ModalFooter>
+                <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>
+                  Batal
+                </Button>
+                <Button variant="destructive" onClick={handleDeleteTournament} loading={isDeleting}>
+                  <Trash2 className="h-4 w-4" />
+                  Ya, Hapus Sekarang
+                </Button>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
