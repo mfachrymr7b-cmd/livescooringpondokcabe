@@ -205,9 +205,10 @@ export function TournamentDetailPage() {
 
   // Query flights berdasarkan round yang dipilih di tee form
   const selectedTeeMatch = matches?.find((m) => m._id === teeForm.matchId) ?? matches?.[0];
+  const teeRoundNumber = selectedTeeMatch?.roundNumber ?? 1;
   const flightsForTeeTime = useQuery(
     api.queries.tournaments.listFlights,
-    id && selectedTeeMatch ? { tournamentId: id, roundNumber: selectedTeeMatch.roundNumber } : "skip"
+    id ? { tournamentId: id, roundNumber: teeRoundNumber } : "skip"
   );
 
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
