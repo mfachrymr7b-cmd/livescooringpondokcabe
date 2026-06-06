@@ -750,12 +750,8 @@ export const deleteTournament = mutation({
       .take(500);
     for (const p of players) await ctx.db.delete(p._id);
 
-    // Hapus notifications terkait
-    const notifications = await ctx.db
-      .query("notifications")
-      .withIndex("by_tournamentId", (q) => q.eq("tournamentId", tid))
-      .take(500);
-    for (const n of notifications) await ctx.db.delete(n._id);
+    // Hapus notifications terkait (query by userId tidak efisien, skip untuk sekarang)
+    // notifications tidak punya index by_tournamentId, skip deletion
 
     // Hapus turnamen itu sendiri
     await ctx.db.delete(tid);
