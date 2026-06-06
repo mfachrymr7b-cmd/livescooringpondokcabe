@@ -18,11 +18,13 @@ import { useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   ClipboardList,
   Clock,
   Edit3,
   Flag,
+  FolderOpen,
   Loader2,
   PlusCircle,
   Search,
@@ -251,6 +253,133 @@ function PlayerWithoutScorecardRow({
   );
 }
 
+// ─── Tournament Folder View (mode tanpa tournamentId) ─────────────────────────
+
+type GroupedTournament = {
+  tournamentId: string;
+  tournamentName: string;
+  holesPerRound: number;
+  rows: ScorecardRow[];
+};
+
+function TournamentFolderView({
+  search,
+  setSearch,
+  grouped,
+  navigate,
+}: {
+  search: string;
+  setSearch: (v: string) => void;
+  grouped: GroupedTournament[];
+  navigate: (path: string) => void;
+}) {
+  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
+
+  function toggleFolder(tid: string) {
+    setOpenFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(tid)) next.delete(tid);
+      else next.add(tid);
+      return next;
+    });
+  }
+
+  return (
+    <div className="space-y-6 p-6">
+      {/* Header */}
+      <div className="rounded-2xl border border-emerald-500/40 bg-emerald-900/20 p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xl font-bold text-white">Semua Scorecard</p>
+            <p className="mt-1 text-sm text-emerald-300">
+              Klik folder turnamen untuk melihat scorecard peserta
+            </p>
+          </div>
+          <Button asChild variant="secondary" size="sm">
+            <Link to="/tournaments">Pilih Turnamen</Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cari nama peserta atau turnamen"
+          className="pl-9"
+        />
+      </div>
+
+      {/* Folder list */}
+      {grouped.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-emerald-600/40 bg-emerald-900/10 py-14 text-center">
+          <FolderOpen className="mx-auto mb-3 h-10 w-10 text-emerald-600" />
+          <p className="font-medium text-emerald-200">Tidak ada scorecard ditemukan</p>
+          <p className="mt-1 text-sm text-emerald-400">Coba kata kunci lain</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {grouped.map(({ tournamentId: tid, tournamentName, holesPerRound, rows }) => {
+            const isOpen = openFolders.has(tid);
+            const verified = rows.filter((r) => r.status === "verified").length;
+            const inProgress = rows.filter((r) => r.status === "in_progress").length;
+
+            return (
+              <div key={tid} className="overflow-hidden rounded-xl border border-emerald-600/40 bg-emerald-900/20">
+                {/* Folder header */}
+                <button
+                  type="button"
+                  onClick={() => toggleFolder(tid)}
+                  className="flex w-full items-center gap-3 px-4 py-4 transition-colors hover:bg-emerald-800/40"
+                >
+                  <FolderOpen className={cn(
+                    "h-5 w-5 shrink-0 transition-colors",
+                    isOpen ? "text-yellow-400" : "text-emerald-400"
+                  )} />
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="font-bold text-white truncate">{tournamentName}</p>
+                    <div className="flex flex-wrap gap-x-3 text-xs text-emerald-400 mt-0.5">
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />{rows.length} pemain
+                      </span>
+                      <span className="flex items-center gap-1 text-emerald-300">
+                        <CheckCircle2 className="h-3 w-3" />{verified} verified
+                      </span>
+                      <span className="flex items-center gap-1 text-amber-300">
+                        <Clock className="h-3 w-3" />{inProgress} in progress
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronDown className={cn(
+                    "h-4 w-4 shrink-0 text-emerald-400 transition-transform",
+                    isOpen && "rotate-180"
+                  )} />
+                </button>
+
+                {/* Scorecard list */}
+                {isOpen && (
+                  <div className="border-t border-emerald-700/40 px-3 py-3 space-y-2">
+                    {rows.map((row) => (
+                      <ScorecardRowItem
+                        key={row._id}
+                        row={row}
+                        holesPerRound={holesPerRound}
+                        onInput={() => navigate(`/scorecards/${row._id}`)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function ScorecardsListPage() {
@@ -366,49 +495,30 @@ export function ScorecardsListPage() {
     }
   }
 
+  // Group scorecard by tournament (untuk mode folder)
+  const grouped = useMemo(() => {
+    const map = new Map<string, { tournamentName: string; holesPerRound: number; rows: ScorecardRow[] }>();
+    for (const sc of filteredAllScorecards) {
+      const tid = sc.tournament?._id ?? "unknown";
+      const tname = sc.tournament?.name ?? "Turnamen Tidak Diketahui";
+      if (!map.has(tid)) {
+        map.set(tid, { tournamentName: tname, holesPerRound: sc.tournament?.holesPerRound ?? 18, rows: [] });
+      }
+      map.get(tid)!.rows.push(sc as ScorecardRow);
+    }
+    return Array.from(map.entries()).map(([tid, val]) => ({ tournamentId: tid, ...val }));
+  }, [filteredAllScorecards]);
+
   if (!id) {
     if (allScorecards === undefined) return <PageSpinner />;
+
     return (
-      <div className="space-y-6 p-6">
-        <div className="rounded-3xl border border-emerald-500/40 bg-emerald-900/20 p-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xl font-bold text-white">Semua Scorecard</p>
-              <p className="mt-2 text-sm text-emerald-300">
-                Nama peserta sudah otomatis tampil di scorecard. Pilih scorecard untuk langsung input skor.
-              </p>
-            </div>
-            <Button asChild variant="secondary" size="sm">
-              <Link to="/tournaments">Pilih Turnamen</Link>
-            </Button>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-emerald-500/20 bg-emerald-950/50 p-4">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari nama peserta atau turnamen"
-          />
-        </div>
-
-        {filteredAllScorecards.length === 0 ? (
-          <div className="rounded-3xl border border-emerald-500/20 bg-amber-900/20 p-8 text-center text-amber-200">
-            Tidak ada scorecard yang cocok.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredAllScorecards.map((row: ScorecardRow) => (
-              <ScorecardRowItem
-                key={row._id}
-                row={row}
-                holesPerRound={row.tournament?.holesPerRound ?? 18}
-                onInput={() => navigate(`/scorecards/${row._id}`)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      <TournamentFolderView
+        search={search}
+        setSearch={setSearch}
+        grouped={grouped}
+        navigate={navigate}
+      />
     );
   }
 
