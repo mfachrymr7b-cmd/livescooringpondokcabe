@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
+import * as XLSX from "xlsx";
 import {
   ArrowLeft,
   BarChart2,
@@ -260,8 +261,39 @@ export function TournamentDetailPage() {
       return;
     }
 
+    if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
+      try {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+        const rows: ImportedPlayer[] = json.slice(0, 200).map((row) => ({
+          name: String(row["Nama"] ?? row["name"] ?? row["Name"] ?? row["NAMA"] ?? "").trim(),
+          email: String(row["Email"] ?? row["email"] ?? row["EMAIL"] ?? "").trim(),
+          handicap: String(row["Handicap"] ?? row["handicap"] ?? row["HCP"] ?? row["hcp"] ?? "").trim(),
+        })).filter((r) => r.name);
+        setImportRows(rows);
+        setImportMessage(`✅ ${rows.length} pemain berhasil dibaca dari ${file.name}.`);
+      } catch {
+        setImportMessage("❌ Gagal membaca file Excel. Pastikan format file benar.");
+      }
+      return;
+    }
+
     setImportRows([]);
-    setImportMessage(`${file.name} dipilih. Preview otomatis tersedia untuk CSV/TSV; file Excel siap diteruskan ke proses import backend.`);
+    setImportMessage(`Format file tidak didukung. Gunakan .xlsx, .xls, .csv, atau .tsv.`);
+  }
+
+  function handleDownloadTemplate() {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Nama", "Email", "Handicap"],
+      ["Budi Santoso", "budi@email.com", "8.5"],
+      ["Siti Rahayu", "siti@email.com", "15.2"],
+    ]);
+    ws["!cols"] = [{ wch: 25 }, { wch: 30 }, { wch: 10 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Pemain");
+    XLSX.writeFile(wb, "template-import-pemain.xlsx");
   }
 
   async function handleImportPlayers() {
@@ -839,14 +871,22 @@ export function TournamentDetailPage() {
 
         <Card className="rounded-lg">
           <CardHeader>
-            <CardTitle>Import Player Excel</CardTitle>
-            <p className="text-sm text-emerald-300">Upload `.xlsx`, `.xls`, `.csv`, atau `.tsv` dari daftar pemain.</p>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <CardTitle>Import Player Excel</CardTitle>
+                <p className="text-sm text-emerald-300">Upload file Excel/CSV dengan kolom: <strong className="text-white">Nama</strong>, Email, Handicap</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleDownloadTemplate} className="shrink-0">
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                Download Template
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-emerald-600/50 bg-emerald-800/30 px-4 py-6 text-center hover:bg-emerald-800/50">
               <FileSpreadsheet className="mb-2 h-8 w-8 text-emerald-400" />
-              <span className="text-sm font-medium text-white">Pilih file player</span>
-              <span className="mt-1 text-xs text-emerald-300">Kolom CSV/TSV: name, email, handicap</span>
+              <span className="text-sm font-medium text-white">Klik atau drag file ke sini</span>
+              <span className="mt-1 text-xs text-emerald-300">.xlsx, .xls, .csv, .tsv · Kolom wajib: <strong>Nama</strong></span>
               <input
                 type="file"
                 accept=".xlsx,.xls,.csv,.tsv"
