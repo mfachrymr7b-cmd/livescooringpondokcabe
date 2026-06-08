@@ -418,6 +418,10 @@ export const updateMatchStatus = mutation({
       await ctx.scheduler.runAfter(0, internal.mutations.scorecards.resetMatchScorecards, {
         matchId: args.id,
       });
+      // Auto-buat scorecard untuk semua pemain di flight
+      await ctx.scheduler.runAfter(100, internal.mutations.scorecards.autoCreateMatchScorecards, {
+        matchId: args.id,
+      });
     }
 
     if (args.status === "completed") {

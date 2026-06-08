@@ -423,3 +423,93 @@ async function _syncMatchplayForHole(
     tournamentId: scorecard.tournamentId,
   });
 }
+
+/**
+ * Auto-buat scorecard untuk semua pemain di flight saat match dimulai.
+ * Dipanggil otomatis saat match di-set ke "ongoing".
+ */
+export const autoCreateMatchScorecards = internalMutation({
+  args: { matchId: v.id("matches") },
+  handler: async (ctx, args) => {
+    const match = await ctx.db.get(args.matchId);
+    if (!match) return;
+
+    const tournament = await ctx.db.get(match.tournamentId);
+    if (!tournament) return;
+
+    const course = await ctx.db.get(tournament.courseId);
+
+    // Ambil semua flight untuk round ini
+    const flights = await ctx.db
+      .query("tournament_flights")
+      .withIndex("by_tournamentId_and_roundNumber", (q) =>
+        q.eq("tournamentId", match.tournamentId).eq("roundNumber", match.roundNumber)
+      )
+      .take(50);
+
+    // Ambil semua player di semua flight
+    const allPlayerIds = new Set<Id<"players">>();
+    for (const flight of flights) {
+      const members = await ctx.db
+        .query("flight_players")
+        .withIndex("by_flightId", (q) => q.eq("flightId", flight._id))
+        .take(50);
+      for (const m of members) allPlayerIds.add(m.playerId);
+    }
+
+    // Jika tidak ada flight, ambil semua player confirmed/registered
+    if (allPlayerIds.size === 0) {
+      const players = await ctx.db
+        .query("players")
+        .withIndex("by_tournamentId", (q) => q.eq("tournamentId", match.tournamentId))
+        .take(256);
+      for (const p of players) {
+        if (p.status === "confirmed" || p.status === "registered") {
+          allPlayerIds.add(p._id);
+        }
+      }
+    }
+
+    // Buat scorecard untuk tiap player yang belum punya
+    let created = 0;
+    for (const playerId of allPlayerIds) {
+      const existing = await ctx.db
+        .query("scorecards")
+        .withIndex("by_matchId_and_playerId", (q) =>
+          q.eq("matchId", args.matchId).eq("playerId", playerId)
+        )
+        .unique();
+
+      if (existing) continue;
+
+      const player = await ctx.db.get(playerId);
+      if (!player) continue;
+
+      // Hitung playing handicap jika tournament pakai handicap
+      let playingHandicap: number | undefined;
+      if (tournament.useHandicap && player.handicapIndex !== undefined && course) {
+        const slope = course.slopeRating ?? 113;
+        const courseRating = course.courseRating ?? course.par;
+        const par = course.par;
+        const raw = (player.handicapIndex * slope) / 113 + (courseRating - par);
+        playingHandicap = Math.round(raw);
+      }
+
+      await ctx.db.insert("scorecards", {
+        playerId,
+        tournamentId: match.tournamentId,
+        matchId: args.matchId,
+        roundNumber: match.roundNumber,
+        status: "in_progress",
+        playingHandicap,
+      });
+      created++;
+    }
+
+    if (created > 0) {
+      await ctx.scheduler.runAfter(0, internal.mutations.leaderboard.recalculate, {
+        tournamentId: match.tournamentId,
+      });
+    }
+  },
+});
